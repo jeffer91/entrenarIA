@@ -74,6 +74,11 @@ async function main(){
  log('interface_loaded',page.url());
  await button(page,'[data-page="rubrica"]');
  await contains(page,'Tu rúbrica');
+ await value(page,'[name="weight0"]','99');
+ await button(page,'#rubric-form button');
+ await page.waitForFunction(()=>document.querySelector('#toast')?.textContent?.includes('sumar 100'),{timeout:4000});
+ log('invalid_rubric_rejected');
+ await value(page,'[name="weight0"]','15');
  await button(page,'#rubric-form button');
  await ensureSaved(page);
  log('rubric_save');
@@ -131,9 +136,32 @@ async function main(){
  await button(page,'[data-action="evaluate"]');
  await page.waitForSelector('#validation-form');
  const summary=await page.$eval('.evaluation',e=>e.innerText);
- console.log('AUDIT_MEMORY '+JSON.stringify({summary:summary.slice(0,500)}));
- log('second_evaluation_with_memory');
+ console.log('AUDIT_MEMORY '+JSON.stringify({summary:summary.slice(0,250)}));
+ assert(summary.includes('Memorias:0'),'Una versión casi idéntica no debe entrar como aprendizaje.');
+ log('near_duplicate_memory_excluded');
  await value(page,'[name="lesson"]','La metodología debe ser verificable.');
+ await button(page,'#validation-form button');
+ await ensureSaved(page);
+ // Third study deliberately differs: memory must recover previously validated cases.
+ const thirdText=('Resumen. Se estudia la mejora de procesos de telecomunicaciones a través de una comparación documental de protocolos de mantenimiento. Metodología. Revisión de indicadores de conectividad, registros técnicos y tiempos de respuesta. Resultados. Se compararon cuatro procedimientos y se detallaron sus limitaciones. Conclusiones. Los protocolos técnicos pueden auditarse con evidencias documentadas. Referencias. Autor 2025. ').repeat(6);
+ await makeText(page,'Estudio independiente de protocolos',thirdText);
+ await page.evaluate(()=>{
+  const original=window.fetch;
+  window.fetch=(url,opts)=>{
+   if(String(url).includes('generativelanguage.googleapis.com')){
+    const user=JSON.parse(JSON.parse(opts.body).contents[0].parts[0].text);
+    const result={studyType:'Documental',summary:'Tercera evaluación simulada. Memorias:'+user.validatedExamples.length,criteria:user.rubric.map(r=>({id:r.id,score:9,observation:'Caso independiente '+r.label,evidence:'Metodología',suggestion:'Precisar evidencia documental'}))};
+    return Promise.resolve(new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(result)}]}}]}),{status:200,headers:{'Content-Type':'application/json'}}));
+   }
+   return original(url,opts);
+  };
+ });
+ await button(page,'[data-action="evaluate"]');
+ await page.waitForSelector('#validation-form');
+ const thirdSummary=await page.$eval('.evaluation',e=>e.innerText);
+ assert(/Memorias:[1-4]/.test(thirdSummary),'Una revisión independiente no recuperó memoria validada.');
+ log('independent_study_recovers_memory',thirdSummary.match(/Memorias:[1-4]/)?.[0]);
+ await value(page,'[name="lesson"]','La evaluación debe atender a los protocolos técnicos y sus limitaciones.');
  await button(page,'#validation-form button');
  await ensureSaved(page);
  await button(page,'[data-page="estadisticas"]');
@@ -142,20 +170,35 @@ async function main(){
  await button(page,'[data-page="configuracion"]');
  await contains(page,'Exportar respaldo');
  log('backup_export_control');
+ if(!electron){
+  const client=await page.createCDPSession();
+  await client.send('Page.setDownloadBehavior',{behavior:'allow',downloadPath:temp});
+  await button(page,'[data-action="backup"]');
+  const backupPath=path.join(temp,'EntrenarIA-respaldo.json');
+  await timeoutPromise((async()=>{while(!fs.existsSync(backupPath))await delay(100);})(),10000,'Backup download');
+  const saved=JSON.parse(fs.readFileSync(backupPath,'utf8'));
+  assert(saved.articles.length>=6,'Backup incomplete');
+  log('backup_download_content',saved.articles.length+' articles');
+  const restore=await page.$('#restore');
+  await restore.uploadFile(backupPath);
+  await page.waitForFunction(()=>document.querySelector('#toast')?.textContent?.includes('restaurado'),{timeout:12000});
+  log('backup_restore');
+ }
+
  // Full browser download checked separately; native Electron opens a file dialog.
  await button(page,'[data-page="biblioteca"]');
  const found=await page.$$eval('[data-open]',a=>a.length);
- assert(found>=5,'Imported files lost');
+ assert(found>=6,'Imported files lost');
  log('library_persistence',found+' items');
  await page.reload({waitUntil:'networkidle0'});
  await page.waitForSelector('[data-page="biblioteca"]');
  await button(page,'[data-page="biblioteca"]');
  const kept=await page.$$eval('[data-open]',a=>a.length);
- assert(kept>=5,'Data lost on reload');
+ assert(kept>=6,'Data lost on reload');
  log('reload_persistence',kept+' items');
  if(errors.length) console.log('AUDIT_BROWSER_ERRORS '+JSON.stringify(errors));
- await browser.disconnect();
- if(!electron)await browser.close();
+ if(electron)await browser.disconnect();
+ else await browser.close();
  if(child)child.kill();
  console.log('AUDIT_DONE '+(electron?'electron':'web'));
 }
