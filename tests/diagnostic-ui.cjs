@@ -1,4 +1,5 @@
 const fs=require('node:fs');
+const http=require('node:http');
 const os=require('node:os');
 const path=require('node:path');
 const assert=require('node:assert/strict');
@@ -64,6 +65,20 @@ async function upload(page,file){
 }
 async function main(){
  await createFiles();
+ let ollamaMock=null;
+ if(electron){
+  ollamaMock=http.createServer(async(req,res)=>{
+   try{
+    if(req.url!=='/api/generate'||req.method!=='POST'){res.writeHead(404).end();return;}
+    let body='';for await(const part of req)body+=part;
+    const data=JSON.parse(body), prompt=JSON.parse(data.prompt);
+    const result={studyType:'Análisis documental técnico',summary:'Respuesta local simulada para probar IPC Ollama.',criteria:prompt.rubric.map(x=>({id:x.id,score:8,observation:'Evaluación local de '+x.label,evidence:'Metodología',suggestion:'Aportar evidencia verificable'}))};
+    res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({response:JSON.stringify(result)}));
+   }catch(e){res.writeHead(500).end(String(e))}
+  });
+  await new Promise((resolve,reject)=>{ollamaMock.once('error',reject);ollamaMock.listen(11434,'127.0.0.1',resolve)});
+ }
+
  const {browser,page,child}=await startBrowser();
  const errors=[];
  page.on('pageerror',e=>errors.push('js:'+e.message));
@@ -164,6 +179,45 @@ async function main(){
  await value(page,'[name="lesson"]','La evaluación debe atender a los protocolos técnicos y sus limitaciones.');
  await button(page,'#validation-form button');
  await ensureSaved(page);
+ // Malformed model responses must not destroy an approved evaluation.
+ await page.evaluate(()=>{
+  const original=window.fetch;
+  window.fetch=(url,options)=>String(url).includes('generativelanguage.googleapis.com')
+   ? Promise.resolve(new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:'not valid JSON'}]}}]}),{status:200,headers:{'Content-Type':'application/json'}}))
+   : original(url,options);
+ });
+ await button(page,'[data-action="evaluate"]');
+ await page.waitForFunction(()=>document.querySelector('#toast')?.textContent?.includes('JSON válido'),{timeout:12000});
+ await contains(page,'Actualizar evaluación validada');
+ log('invalid_ai_response_preserves_validated_work');
+ if(!electron){
+  const client=await page.createCDPSession();
+  await client.send('Page.setDownloadBehavior',{behavior:'allow',downloadPath:temp});
+  await button(page,'[data-action="report"]');
+  const reportPath=path.join(temp,'Evaluacion-articulo.md');
+  await timeoutPromise((async()=>{while(!fs.existsSync(reportPath))await delay(100)})(),10000,'Report download');
+  const report=fs.readFileSync(reportPath,'utf8');
+  assert(report.includes('Estudio independiente de protocolos')&&report.includes('Nota validada:'),'Incomplete report');
+  log('report_download');
+ }
+ await page.click('#holdout');
+ await ensureSaved(page);
+ assert(await page.$eval('#holdout',e=>e.checked),'Holdout not persisted in detail');
+ log('holdout_control');
+ if(electron){
+  await button(page,'[data-page="configuracion"]');
+  await page.select('#provider','ollama');
+  await button(page,'#config-form button');
+  await ensureSaved(page);
+  await makeText(page,'Prueba Ollama IPC',('Resumen. Verificación operativa de puentes de Electron y procedimientos administrativos. Metodología. Se contrastan enfoques de archivo institucional y se documentan procedimientos. Resultados. Se recopilan hallazgos. Conclusiones. La metodología puede mejorarse. Referencias. Guía 2026. ').repeat(6));
+  await button(page,'[data-action="evaluate"]');
+  await page.waitForSelector('#validation-form',{timeout:20000});
+  await contains(page,'Respuesta local simulada para probar IPC Ollama.');
+  log('ollama_local_ipc_mock');
+  await value(page,'[name="lesson"]','Evaluación de conectividad local de Ollama sin modelo real.');
+  await button(page,'#validation-form button');
+  await ensureSaved(page);
+ }
  await button(page,'[data-page="estadisticas"]');
  await contains(page,'Comparación por artículo');
  log('statistics');
@@ -188,13 +242,13 @@ async function main(){
  // Full browser download checked separately; native Electron opens a file dialog.
  await button(page,'[data-page="biblioteca"]');
  const found=await page.$$eval('[data-open]',a=>a.length);
- assert(found>=6,'Imported files lost');
+ assert(found>=(electron?7:6),'Imported files lost');
  log('library_persistence',found+' items');
  await page.reload({waitUntil:'networkidle0'});
  await page.waitForSelector('[data-page="biblioteca"]');
  await button(page,'[data-page="biblioteca"]');
  const kept=await page.$$eval('[data-open]',a=>a.length);
- assert(kept>=6,'Data lost on reload');
+ assert(kept>=(electron?7:6),'Data lost on reload');
  log('reload_persistence',kept+' items');
  if(errors.length) console.log('AUDIT_BROWSER_ERRORS '+JSON.stringify(errors));
  if(electron)await browser.disconnect();
