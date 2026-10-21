@@ -160,6 +160,8 @@ async function main(){
  // Third study deliberately differs: memory must recover previously validated cases.
  const thirdText=('Resumen. Se estudia la mejora de procesos de telecomunicaciones a través de una comparación documental de protocolos de mantenimiento. Metodología. Revisión de indicadores de conectividad, registros técnicos y tiempos de respuesta. Resultados. Se compararon cuatro procedimientos y se detallaron sus limitaciones. Conclusiones. Los protocolos técnicos pueden auditarse con evidencias documentadas. Referencias. Autor 2025. ').repeat(6);
  await makeText(page,'Estudio independiente de protocolos',thirdText);
+ await page.click('#holdout');
+ await page.waitForFunction(()=>document.querySelector('#holdout')?.checked);
  await page.evaluate(()=>{
   const original=window.fetch;
   window.fetch=(url,opts)=>{
@@ -200,9 +202,8 @@ async function main(){
   assert(report.includes('Estudio independiente de protocolos')&&report.includes('Nota validada:'),'Incomplete report');
   log('report_download');
  }
- await page.click('#holdout');
  await ensureSaved(page);
- assert(await page.$eval('#holdout',e=>e.checked),'Holdout not persisted in detail');
+ assert(await page.$eval('#holdout',e=>e.checked&&e.disabled),'Holdout must remain locked once evaluated');
  log('holdout_control');
  if(electron){
   await button(page,'[data-page="configuracion"]');
