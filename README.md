@@ -34,12 +34,12 @@ Desarrollo local: `npm run dev`. Compilación: `npm run build`. Pruebas: `npm te
 3. Ajustar la rúbrica inicial orientativa a las reglas institucionales.
 4. Evaluar con IA. Cada criterio devuelve nota o «no evaluable», observación, evidencia literal y sugerencia. Se comprueba si la evidencia citada está en el texto, no si los datos son auténticos.
 5. Corregir las notas y observaciones, escribir una lección y confirmar. Solo entonces se usa como memoria.
-6. Reservar casos de prueba ANTES de usarlos como ejemplos. Se excluyen ellos mismos y archivos idénticos en la recuperación. Para una prueba rigurosa, no cargar otras versiones del mismo estudio como entrenamiento.
+6. Reservar casos de prueba ANTES de usarlos como ejemplos. Se excluyen el artículo actual, archivos idénticos y versiones muy semejantes detectadas por similitud del texto/título. Esta detección es aproximada: para una prueba rigurosa, no introducir otras versiones del mismo estudio como entrenamiento.
 7. Repetir evaluaciones conservando historial y exportar resultados Markdown o respaldos JSON.
 
 ## Qué significa aprender
 
-Recuperación por coincidencia léxica y carrera de hasta cuatro ejemplos humanos validados compatibles con la rúbrica. Los ejemplos se incorporan al contexto; no se modifican los pesos del modelo ni se promete mejora automática. Las estadísticas comparan la última nota IA con la nota humana (error absoluto medio), separando casos reservados. El historial permite revisar versiones, pero no se ejecuta automáticamente un benchmark longitudinal.
+Recuperación por coincidencia léxica del contenido, título y carrera de hasta cuatro ejemplos humanos validados compatibles con la rúbrica. Se intenta evitar que diferentes revisiones del mismo artículo contaminen la evaluación. La ficha muestra qué ejemplos se utilizaron. Los ejemplos se incorporan al contexto; no se modifican los pesos del modelo ni se promete mejora automática. Las estadísticas comparan la última nota IA con la nota humana (error absoluto medio), separando casos reservados. El historial permite revisar versiones, pero no se ejecuta automáticamente un benchmark longitudinal.
 
 ## Datos y límites
 
