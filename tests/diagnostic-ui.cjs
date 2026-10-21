@@ -50,7 +50,7 @@ async function ensureSaved(page){await delay(350)}
 async function makeText(page,title,content=text){
  await button(page,'[data-page="evaluar"]');
  await value(page,'#manual-title',title);
- await value(page,'#manual-text',content);
+ await value(page,'#manual-text',content+' Identificador de revisión: '+title+'.');
  await value(page,'#career','Redes y Telecomunicaciones');
  await button(page,'[data-action="manual"]');
  await page.waitForSelector('.detail-actions',{timeout:15000});
