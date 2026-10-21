@@ -44,6 +44,8 @@ jobs:
       - name: Run Electron desktop with npm start
         run: |
           which xvfb-run
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
           xvfb-run -a npm start -- --remote-debugging-port=9223 > /tmp/entrenaria-electron.log 2>&1 &
           echo $! > /tmp/entrenaria-electron.pid
           sleep 8
