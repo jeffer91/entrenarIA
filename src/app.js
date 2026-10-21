@@ -79,7 +79,7 @@ function action(name){
  if(name==='evaluate'){
  if(config.provider==='gemini'&&!apiKey){page='configuracion';render();return toast('Configura tu clave para comenzar la evaluación con IA.');}
  if(config.provider==='gemini'&&!confirm('Enviar este artículo, la rúbrica y hasta 4 ejemplos validados a Gemini? La revisión independiente genera 2 solicitudes cuando está activada y puede tener costo.'))return;
- run(async()=>{const memories=memoryFor(a,articles,rubric);const result=await evaluate(a,rubric,memories,config,apiKey);if(a.result)(a.history ||= []).push({result:a.result,validated:a.validated||null});a.result=result;a.validated=null;await persist();toast('Evaluación completada. Revisa las evidencias y confirma tu criterio.');});
+ run(async()=>{const assigned=forCareer(a.career);const memories=memoryFor(a,articles,assigned);const result=await evaluate(a,assigned,memories,config,apiKey);if(a.result)(a.history ||= []).push({result:a.result,validated:a.validated||null});a.result=result;a.validated=null;await persist();toast('Evaluación completada. Revisa las evidencias y confirma tu criterio.');});
  }
  if(name==='delete'&&confirm('Eliminar este artículo, sus evaluaciones y su memoria de este dispositivo?'))run(async()=>{articles=articles.filter(x=>x.id!==selected);selected=null;await persist();page='biblioteca';});
  if(name==='backup')download('EntrenarIA-respaldo.json',JSON.stringify({version:1,articles,rubric,rubricProfiles},null,2));
