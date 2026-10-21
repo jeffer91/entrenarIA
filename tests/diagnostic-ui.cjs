@@ -220,7 +220,7 @@ async function main(){
   await ensureSaved(page);
  }
  await button(page,'[data-page="estadisticas"]');
- await contains(page,'Comparación por artículo');
+ await contains(page,'Comparación por versión validada');
  log('statistics');
  await button(page,'[data-page="configuracion"]');
  await contains(page,'Exportar respaldo');
