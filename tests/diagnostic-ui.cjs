@@ -97,6 +97,13 @@ async function main(){
  await button(page,'#rubric-form button');
  await ensureSaved(page);
  log('rubric_save');
+ await value(page,'#new-career','Redes y Telecomunicaciones');
+ await page.$eval('[data-action="new-profile"]',x=>x.click());
+ await page.waitForFunction(()=>document.querySelector('#rubric-profile')?.value==='Redes y Telecomunicaciones',{timeout:10000});
+ await value(page,'[name="rule0"]','Consistencia del título y los objetivos para Redes y Telecomunicaciones.');
+ await button(page,'#rubric-form button');
+ await page.waitForFunction(()=>document.querySelector('#toast')?.textContent?.includes('guardada'),{timeout:10000});
+ log('career_rubric_profile');
  await upload(page,txt); log('import_txt');
  await upload(page,pdf); log('import_pdf');
  await upload(page,docx); log('import_docx');
