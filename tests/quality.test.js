@@ -60,3 +60,21 @@ test('historical assessments contribute to statistics',()=>{
  assert.equal(result[0].ai,8);
  assert.equal(result[1].human,8);
 });
+
+test('career-specific rubric profiles are checked during restore',()=>{
+ const base=reviewed(article('a','Prueba','METODOLOGÍA evaluación'));
+ const changed=rubric.map(r=>({...r}));
+ const ok=validateBackup({version:1,articles:[base],rubric,rubricProfiles:{Redes:changed}});
+ assert.equal(ok.rubricProfiles.Redes[0].label,rubric[0].label);
+ assert.throws(()=>validateBackup({version:1,articles:[base],rubric,rubricProfiles:{Redes:[{...changed[0],weight:10}]}}));
+});
+test('report HTML escapes student-controlled titles and distinguishes human notes',async()=>{
+ const {reportHtml}=await import('../src/report.js');
+ const a=reviewed(article('a','Trabajo <script>alert("x")</script>','METODOLOGÍA bibliografía resultados'));
+ const html=reportHtml(a);
+ assert(html.includes('&lt;script&gt;'));
+ assert(!html.includes('<script>alert'));
+ assert(html.includes('Nota validada'));
+ assert(html.includes('Observación definitiva'));
+ assert(html.includes('La decisión académica final'));
+});
