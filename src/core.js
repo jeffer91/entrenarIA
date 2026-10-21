@@ -98,6 +98,7 @@ function verifyAssessment(res,text) {
 export function validateBackup(b) {
   if(b?.version!==1||!Array.isArray(b.articles)||b.articles.length>5000)throw new Error('Respaldo incompatible.');
   validateRubric(b.rubric);
+  if(b.rubricProfiles!==undefined){if(!b.rubricProfiles||typeof b.rubricProfiles!=='object'||Array.isArray(b.rubricProfiles)||Object.keys(b.rubricProfiles).length>100)throw new Error('Perfiles de rúbrica inválidos.');for(const [name,items] of Object.entries(b.rubricProfiles)){if(!name.trim()||name.length>150)throw new Error('Nombre de carrera inválido.');validateRubric(items);}}
   const ids=new Set();
   const articles=b.articles.map(a=>{
     if(!a||typeof a.id!=='string'||!a.id||ids.has(a.id)||typeof a.title!=='string'||!a.title.trim()||typeof a.text!=='string'||a.text.length>120000||typeof a.hash!=='string'||typeof a.career!=='string'||!Array.isArray(a.history||[])||(a.history||[]).length>100)throw new Error('Artículo inválido en el respaldo.');
