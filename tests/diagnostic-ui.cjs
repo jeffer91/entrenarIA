@@ -161,6 +161,9 @@ async function main(){
  console.log('AUDIT_MEMORY '+JSON.stringify({summary:summary.slice(0,250)}));
  assert(summary.includes('Memorias:0'),'Una versión casi idéntica no debe entrar como aprendizaje.');
  log('near_duplicate_memory_excluded');
+ await page.$eval('[data-na="metodo"]',box=>box.click());
+ assert(await page.$eval('#score-metodo',x=>x.disabled),'No evaluable must disable score field');
+ log('human_non_assessable_criterion');
  await value(page,'[name="lesson"]','La metodología debe ser verificable.');
  await button(page,'#validation-form button');
  await ensureSaved(page);
