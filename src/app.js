@@ -8,7 +8,9 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 let articles=[],rubric=structuredClone(defaultRubric),rubricProfiles={},rubricProfile='general',config={provider:'gemini',model:'gemini-2.5-flash'},apiKey='',page='inicio',selected=null,busy=false,filter='',careerFilter='';
 const nav=[['inicio','◈','Inicio'],['evaluar','+','Evaluar artículo'],['biblioteca','▤','Biblioteca'],['memoria','◇','Aprendizaje'],['rubrica','☷','Rúbrica'],['estadisticas','▥','Estadísticas'],['configuracion','⚙','Configuración']];
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),6500);}
-async function persist(){try{await write('workspace',{version:1,articles,rubric});}catch(error){try{const saved=await read('workspace');if(saved){const safe=validateBackup(saved);articles=safe.articles;rubric=safe.rubric;}}catch{}throw error;}}
+function activeRubric(){return rubricProfile==='general'?rubric:rubricProfiles[rubricProfile]||rubric;}
+function forCareer(career){return rubricProfiles[career]||rubric;}
+async function persist(){try{await write('workspace',{version:1,articles,rubric,rubricProfiles});}catch(error){try{const saved=await read('workspace');if(saved){const safe=validateBackup(saved);articles=safe.articles;rubric=safe.rubric;rubricProfiles=safe.rubricProfiles||{};}}catch{}throw error;}}
 function button(text,action,cls='primary',extra=''){return `<button class="${cls}" data-action="${action}" ${extra}>${text}</button>`;}
 function metric(n,t){return `<div class="metric"><strong>${esc(n)}</strong><span>${t}</span></div>`;}
 function date(a){return new Date(a.created).toLocaleDateString('es-EC');}
