@@ -25,6 +25,19 @@ ipcMain.handle('file:export', async (event, payload) => {
  await require('node:fs/promises').writeFile(result.filePath,payload.data,'utf8');
  return true;
 });
+ipcMain.handle('report:pdf', async (event, payload) => {
+ if(event.sender!==win?.webContents || event.senderFrame?.url!==entry)throw new Error('Origen no autorizado.');
+ if(!payload||typeof payload.html!=='string'||payload.html.length>350000||!payload.html.startsWith('<!doctype html>'))throw new Error('Informe inválido.');
+ const printWindow=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,javascript:false}});
+ try{
+  await printWindow.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(payload.html));
+  const buffer=await printWindow.webContents.printToPDF({printBackground:true,pageSize:'A4'});
+  const answer=await dialog.showSaveDialog(win,{defaultPath:'Informe-EntrenarIA.pdf',filters:[{name:'PDF',extensions:['pdf']}]});
+  if(answer.canceled||!answer.filePath)return false;
+  await require('node:fs/promises').writeFile(answer.filePath,buffer);
+  return true;
+ }finally{if(!printWindow.isDestroyed())printWindow.destroy();}
+});
 app.whenReady().then(() => {
  session.defaultSession.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
  open(); app.on('activate',()=>{if(!BrowserWindow.getAllWindows().length) open();});
