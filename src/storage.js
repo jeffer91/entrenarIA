@@ -1,0 +1,3 @@
+const db = new Promise((resolve,reject)=>{const r=indexedDB.open('entrenaria',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+export async function read(key){const d=await db;return new Promise((resolve,reject)=>{const r=d.transaction('state').objectStore('state').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+export async function write(key,value){const d=await db;return new Promise((resolve,reject)=>{const tx=d.transaction('state','readwrite');tx.objectStore('state').put(value,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('No se pudo guardar'));});}
