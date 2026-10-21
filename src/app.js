@@ -5,7 +5,7 @@ import {extract} from './import.js';
 import {evaluate} from './ai.js';
 import {reportHtml} from './report.js';
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let articles=[],rubric=structuredClone(defaultRubric),config={provider:'gemini',model:'gemini-2.5-flash'},apiKey='',page='inicio',selected=null,busy=false,filter='',careerFilter='';
+let articles=[],rubric=structuredClone(defaultRubric),rubricProfiles={},rubricProfile='general',config={provider:'gemini',model:'gemini-2.5-flash'},apiKey='',page='inicio',selected=null,busy=false,filter='',careerFilter='';
 const nav=[['inicio','◈','Inicio'],['evaluar','+','Evaluar artículo'],['biblioteca','▤','Biblioteca'],['memoria','◇','Aprendizaje'],['rubrica','☷','Rúbrica'],['estadisticas','▥','Estadísticas'],['configuracion','⚙','Configuración']];
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),6500);}
 async function persist(){try{await write('workspace',{version:1,articles,rubric});}catch(error){try{const saved=await read('workspace');if(saved){const safe=validateBackup(saved);articles=safe.articles;rubric=safe.rubric;}}catch{}throw error;}}
