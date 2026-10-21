@@ -1,0 +1,54 @@
+name: EntrenarIA audit - real UI flows
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/diagnostic-ui.cjs'
+      - '.github/workflows/audit-ui.yml'
+      - 'src/**'
+      - 'electron/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install app and browser test packages
+        run: |
+          ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+          npm install --no-save puppeteer-core pdf-lib jszip
+      - name: Build web
+        run: npm run build
+      - name: Run browser audit
+        run: |
+          which google-chrome
+          CHROME_BIN=/usr/bin/google-chrome node tests/diagnostic-ui.cjs
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Electron and test packages
+        run: |
+          npm ci
+          npm install --no-save puppeteer-core pdf-lib jszip
+      - name: Run Electron desktop with npm start
+        run: |
+          which xvfb-run
+          xvfb-run -a npm start -- --remote-debugging-port=9223 > /tmp/entrenaria-electron.log 2>&1 &
+          echo $! > /tmp/entrenaria-electron.pid
+          sleep 8
+          cat /tmp/entrenaria-electron.log
+          TARGET=electron node tests/diagnostic-ui.cjs
+      - name: Show Electron output if audit fails
+        if: failure()
+        run: cat /tmp/entrenaria-electron.log || true
