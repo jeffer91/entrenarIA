@@ -1,0 +1,162 @@
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
+const assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const puppeteer=require('puppeteer-core');
+const JSZip=require('jszip');
+const {PDFDocument,StandardFonts}=require('pdf-lib');
+
+const electron=process.env.TARGET==='electron';
+const log=(name,msg='')=>console.log('AUDIT_PASS '+name+(msg?' | '+msg:''));
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+const text='Resumen. Estudio documental sobre evaluación académica y políticas institucionales. '.repeat(12)+' Metodología. Se analizaron documentos institucionales mediante una matriz de categorías. Resultados. Se identificaron tres criterios de mejora verificables. Conclusiones. La evidencia revisada permite mejorar la evaluación. Referencias. Autor, A. (2024). Documento de prueba.';
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'entrenaria-audit-'));
+const txt=path.join(temp,'audit-fixture.txt');
+const pdf=path.join(temp,'audit-fixture.pdf');
+const docx=path.join(temp,'audit-fixture.docx');
+fs.writeFileSync(txt,text);
+
+async function createFiles(){
+ const p=await PDFDocument.create(), font=await p.embedFont(StandardFonts.Helvetica), page=p.addPage([612,792]);
+ const lines=[...text.matchAll(/.{1,78}(?:\s|$)/g)].map(x=>x[0]).slice(0,34);
+ lines.forEach((line,i)=>page.drawText(line.trim().replace(/[^\x20-\x7E]/g,' '),{x:40,y:740-i*17,size:9,font}));
+ fs.writeFileSync(pdf,await p.save());
+ const zip=new JSZip();
+ zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+ zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+ const paragraphs=text.match(/.{1,140}/g).map(s=>'<w:p><w:r><w:t>'+s.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</w:t></w:r></w:p>').join('');
+ zip.file('word/document.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+paragraphs+'</w:body></w:document>');
+ fs.writeFileSync(docx,await zip.generateAsync({type:'nodebuffer'}));
+}
+function timeoutPromise(p,ms,label){return Promise.race([p,delay(ms).then(()=>{throw new Error('Timeout '+label)})]);}
+async function startBrowser(){
+ if(electron){
+  return timeoutPromise((async()=>{while(true){try{const browser=await puppeteer.connect({browserURL:'http://127.0.0.1:9223',defaultViewport:null});const pages=await browser.pages();const page=pages.find(p=>p.url().includes('index.html'));if(page)return {browser,page,child:null};}catch{}await delay(400);}})(),45000,'Electron CDP');
+ }
+ const chrome=process.env.CHROME_BIN||'/usr/bin/google-chrome';
+ const child=spawn(process.execPath,['node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port','4173'],{stdio:['ignore','pipe','pipe']});
+ let stderr='';child.stderr.on('data',b=>{stderr+=b.toString()});
+ await timeoutPromise((async()=>{while(true){try{const r=await fetch('http://127.0.0.1:4173/');if(r.ok)break;}catch{}await delay(300);}})(),20000,'Vite preview '+stderr);
+ const browser=await puppeteer.launch({executablePath:chrome,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const page=await browser.newPage();
+ await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle0'});
+ return {browser,page,child};
+}
+async function button(page,selector){await page.waitForSelector(selector,{visible:true,timeout:15000});await page.click(selector);}
+async function value(page,selector,value){await page.waitForSelector(selector);await page.$eval(selector,(el,x)=>{el.value=x;el.dispatchEvent(new Event('input',{bubbles:true}));},value)}
+async function contains(page,s){const body=await page.$eval('body',e=>e.innerText);assert(body.includes(s),'No aparece "'+s+'"');}
+async function ensureSaved(page){await delay(350)}
+async function makeText(page,title,content=text){
+ await button(page,'[data-page="evaluar"]');
+ await value(page,'#manual-title',title);
+ await value(page,'#manual-text',content);
+ await value(page,'#career','Redes y Telecomunicaciones');
+ await button(page,'[data-action="manual"]');
+ await page.waitForSelector('.detail-actions',{timeout:15000});
+ await contains(page,title);
+}
+async function upload(page,file){
+ await button(page,'[data-page="evaluar"]');
+ const upload=await page.$('#upload');
+ await upload.uploadFile(file);
+ await page.waitForFunction(name=>document.body.innerText.includes(name),{timeout:22000},path.basename(file).replace(/\.[^.]+$/,''));
+}
+async function main(){
+ await createFiles();
+ const {browser,page,child}=await startBrowser();
+ const errors=[];
+ page.on('pageerror',e=>errors.push('js:'+e.message));
+ page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text().slice(0,160))});
+ page.on('dialog',async d=>{await d.accept()});
+ if(electron) await page.waitForSelector('nav',{timeout:20000});
+ else await page.waitForSelector('nav');
+ log('interface_loaded',page.url());
+ await button(page,'[data-page="rubrica"]');
+ await contains(page,'Tu rúbrica');
+ await button(page,'#rubric-form button');
+ await ensureSaved(page);
+ log('rubric_save');
+ await upload(page,txt); log('import_txt');
+ await upload(page,pdf); log('import_pdf');
+ await upload(page,docx); log('import_docx');
+ await makeText(page,'Auditoría semántica número uno');
+ log('manual_import');
+ await button(page,'[data-action="evaluate"]');
+ await contains(page,'Configura tu espacio');
+ log('no_ai_configuration_route');
+ await value(page,'[name="model"]','gemini-2.5-flash');
+ await value(page,'[name="key"]','test-key-not-real');
+ await button(page,'#config-form button');
+ await ensureSaved(page);
+ await button(page,'[data-page="biblioteca"]');
+ await page.waitForSelector('[data-open]');
+ const selector=await page.evaluate(()=>{const n=[...document.querySelectorAll('[data-open]')].find(e=>e.innerText.includes('Auditoría semántica número uno'));return n?.getAttribute('data-open')});
+ assert(selector,'Not in library');
+ await button(page,'[data-open="'+selector+'"]');
+ await page.evaluate(()=>{
+  const original=window.fetch;
+  window.fetch=(url,opts)=>{
+   if(String(url).includes('generativelanguage.googleapis.com')){
+    const req=JSON.parse(opts.body),user=JSON.parse(req.contents[0].parts[0].text);
+    const result={studyType:'Documental',summary:'Análisis simulado para verificar la interfaz, NO una evaluación de IA real.',criteria:user.rubric.map(r=>({id:r.id,score:8,observation:'Observación de prueba '+r.label,evidence:'Metodología',suggestion:'Detallar el procedimiento'}))};
+    return Promise.resolve(new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(result)}]}}]}),{status:200,headers:{'Content-Type':'application/json'}}));
+   }
+   return original(url,opts);
+  };
+ });
+ await button(page,'[data-action="evaluate"]');
+ await page.waitForSelector('#validation-form',{timeout:16000});
+ log('ai_api_contract_mock');
+ await value(page,'[name="lesson"]','La evidencia debe corresponder a la metodología; no inventar resultados.');
+ await button(page,'#validation-form button');
+ await ensureSaved(page);
+ await contains(page,'Actualizar evaluación validada');
+ log('human_validation');
+ await button(page,'[data-page="memoria"]');
+ await contains(page,'Auditoría semántica número uno');
+ log('validated_memory');
+ await makeText(page,'Auditoría semántica número dos',text.replace('estudio documental','análisis documental ampliado'));
+ await page.evaluate(()=>{
+  const original=window.fetch;
+  window.fetch=(url,opts)=>{
+   if(String(url).includes('generativelanguage.googleapis.com')){
+    const user=JSON.parse(JSON.parse(opts.body).contents[0].parts[0].text);
+    const result={studyType:'Documental',summary:'Segunda evaluación simulada. Memorias:'+user.validatedExamples.length,criteria:user.rubric.map(r=>({id:r.id,score:7,observation:'Segunda observación '+r.label,evidence:'Metodología',suggestion:'Describir limitaciones'}))};
+    return Promise.resolve(new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(result)}]}}]}),{status:200,headers:{'Content-Type':'application/json'}}));
+   }
+   return original(url,opts);
+  };
+ });
+ await button(page,'[data-action="evaluate"]');
+ await page.waitForSelector('#validation-form');
+ const summary=await page.$eval('.evaluation',e=>e.innerText);
+ console.log('AUDIT_MEMORY '+JSON.stringify({summary:summary.slice(0,500)}));
+ log('second_evaluation_with_memory');
+ await value(page,'[name="lesson"]','La metodología debe ser verificable.');
+ await button(page,'#validation-form button');
+ await ensureSaved(page);
+ await button(page,'[data-page="estadisticas"]');
+ await contains(page,'Comparación por artículo');
+ log('statistics');
+ await button(page,'[data-page="configuracion"]');
+ await contains(page,'Exportar respaldo');
+ log('backup_export_control');
+ // Full browser download checked separately; native Electron opens a file dialog.
+ await button(page,'[data-page="biblioteca"]');
+ const found=await page.$$eval('[data-open]',a=>a.length);
+ assert(found>=5,'Imported files lost');
+ log('library_persistence',found+' items');
+ await page.reload({waitUntil:'networkidle0'});
+ await page.waitForSelector('[data-page="biblioteca"]');
+ await button(page,'[data-page="biblioteca"]');
+ const kept=await page.$$eval('[data-open]',a=>a.length);
+ assert(kept>=5,'Data lost on reload');
+ log('reload_persistence',kept+' items');
+ if(errors.length) console.log('AUDIT_BROWSER_ERRORS '+JSON.stringify(errors));
+ await browser.disconnect();
+ if(!electron)await browser.close();
+ if(child)child.kill();
+ console.log('AUDIT_DONE '+(electron?'electron':'web'));
+}
+main().then(()=>process.exit(0)).catch(e=>{console.error('AUDIT_FAIL',e.stack);process.exit(1)});
