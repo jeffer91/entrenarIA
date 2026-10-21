@@ -23,6 +23,10 @@ jobs:
         run: |
           ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
           npm install --no-save puppeteer-core pdf-lib jszip
+      - name: Inspect dependency advisories
+        run: |
+          npm audit --json > /tmp/entrenaria-npm-audit.json || true
+          node -e "const j=require('/tmp/entrenaria-npm-audit.json'); console.log('AUDIT_VULNERABILITIES',JSON.stringify({counts:j.metadata?.vulnerabilities,packages:Object.entries(j.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,isDirect:v.isDirect,fix:v.fixAvailable,via:(v.via||[]).map(x=>typeof x==='string'?x:{name:x.name,title:x.title,url:x.url,range:x.range})}))}))"
       - name: Build web
         run: npm run build
       - name: Run browser audit
