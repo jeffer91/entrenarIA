@@ -88,7 +88,7 @@ async function main(){
  else await page.waitForSelector('nav');
  log('interface_loaded',page.url());
  await button(page,'[data-page="rubrica"]');
- await contains(page,'Tu rúbrica');
+ await contains(page,'Rúbricas académicas por carrera');
  await value(page,'[name="weight0"]','99');
  await button(page,'#rubric-form button');
  await page.waitForFunction(()=>document.querySelector('#toast')?.textContent?.includes('sumar 100'),{timeout:4000});
