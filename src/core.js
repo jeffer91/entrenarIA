@@ -11,12 +11,38 @@ export function validateRubric(r) {
 }
 export const normalize = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function score(criteria,rubric) {
- if(criteria.some(c=>c.score===null)) return null;
- return Math.round(rubric.reduce((s,r)=>s+(criteria.find(c=>c.id===r.id)?.score??0)*r.weight/100,0)*100)/100;
+ if(!Array.isArray(criteria)||!Array.isArray(rubric))return null;
+ const values=rubric.map(r=>criteria.find(c=>c.id===r.id)?.score);
+ if(values.some(v=>typeof v!=='number'||!Number.isFinite(v)||v<0||v>10))return null;
+ return Math.round(rubric.reduce((s,r,i)=>s+values[i]*r.weight/100,0)*100)/100;
 }
 export function memoryFor(article,articles,rubric) {
- const tokens = new Set(normalize(article.text).match(/[a-z]{5,}/g)||[]);
- return articles.filter(a=>a.id!==article.id&&a.hash!==article.hash&&a.validated&&!a.holdout&&JSON.stringify(a.result?.rubric)===JSON.stringify(rubric)).map(a=>({a,rank:(a.career===article.career?20:0)+(normalize(a.title+' '+(a.validated.lesson||'')).match(/[a-z]{5,}/g)||[]).filter(t=>tokens.has(t)).length})).sort((a,b)=>b.rank-a.rank).slice(0,4).map(({a})=>({id:a.id,title:a.title,career:a.career,lesson:a.validated.lesson,criteria:a.validated.criteria,summary:a.result.summary}));
+ // A human-reviewed example is useful only if it is relevant AND independent.
+ // Exact and near-duplicate versions of the article must never teach its own evaluation.
+ const common=new Set('sobre entre desde hasta donde tanto cuando porque cuales cuales donde para como esta este estos estas unos unas hacia desde cual cuyo junto mediante segun forma estudio estudios articulo articulos investigacion investigaciones analisis evaluacion metodologia resultados conclusion conclusiones objetivo objetivos propuesta trabajo datos informacion proceso procesos mediante'.split(' '));
+ const terms=value=>new Set((normalize(value).match(/[a-z]{4,}/g)||[]).filter(w=>!common.has(w)).slice(0,4800));
+ const sample=a=>String(a?.text||'').slice(0,22000)+' '+String(a?.text||'').slice(-6000);
+ const overlap=(a,b)=>{
+  if(!a.size||!b.size)return 0;
+  let hit=0;for(const x of a)if(b.has(x))hit++;
+  return hit/(a.size+b.size-hit);
+ };
+ const sourceText=terms(sample(article));
+ const sourceTitle=terms(article.title);
+ const reference=JSON.stringify(rubric);
+ return articles.filter(a=>a.id!==article.id&&a.hash!==article.hash&&a.validated&&!a.holdout&&a.result&&JSON.stringify(a.result.rubric)===reference).map(a=>{
+  const textTerms=terms(sample(a));
+  const titleSimilarity=overlap(sourceTitle,terms(a.title));
+  const textSimilarity=overlap(sourceText,textTerms);
+  // Different file bytes can still represent a revised version of the same study.
+  if(textSimilarity>=0.82||(titleSimilarity>=0.9&&textSimilarity>=0.38))return null;
+  const lessonSimilarity=overlap(sourceText,terms(a.validated.lesson||''));
+  const rank=textSimilarity*70+titleSimilarity*18+lessonSimilarity*8+(a.career===article.career?6:0);
+  return {a,rank};
+ }).filter(Boolean).sort((a,b)=>b.rank-a.rank).slice(0,4).map(({a})=>({
+  id:a.id,title:a.title,career:a.career,
+  lesson:a.validated.lesson,criteria:a.validated.criteria,summary:a.result.summary
+ }));
 }
 export function structural(text) {
  const t=normalize(text);const warnings=[];
